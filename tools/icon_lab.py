@@ -244,6 +244,12 @@ if __name__ == "__main__":
     for arg in sys.argv[2:]:
         if arg.startswith("--style="):
             STYLE = arg.split("=", 1)[1]
+        elif arg.startswith("--pin="):        # --pin=r,g,b  (display-p3, 0..1)
+            C["pin"] = tuple(float(v) for v in arg.split("=", 1)[1].split(","))
+        elif arg.startswith("--pin-dark="):
+            C["pin_dark"] = tuple(float(v) for v in arg.split("=", 1)[1].split(","))
+        elif arg.startswith("--pin-glass="):  # translucency of the pin group
+            GLASS["pin"] = (GLASS["pin"][0], float(arg.split("=", 1)[1]))
     os.makedirs(out_dir, exist_ok=True)
     write_bundle(out_dir)
     if "--flat" in sys.argv:
