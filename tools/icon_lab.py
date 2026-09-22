@@ -13,35 +13,36 @@ import sys
 # ---------------------------------------------------------------- design
 DX, DY = -18, -44                     # optical centring of the whole mark
 ORIGIN = (300 + DX, 748 + DY)
-RING_OUT, RING_IN = 86, 44
+RING_OUT, RING_IN = 96, 50
 PIN_C = (706 + DX, 486 + DY)
 PIN_R = 172
 PIN_TIP = (706 + DX, 782 + DY)
 HOLE_R = 64
-# an even hop from the top of the ring, peaking between the two, landing in the pin's head
-ARC = ((318 + DX, 670 + DY), (470 + DX, 170 + DY), (640 + DX, 628 + DY))   # start, control, end
-ARC_W = (36, 72)                      # width at start, width at end: it grows as it travels
+# an even hop from the top of the ring, peaking between the two, dipping about a
+# third of the way into the pin's head (well clear of its hole)
+ARC = ((318 + DX, 670 + DY), (410 + DX, 160 + DY), (548 + DX, 512 + DY))   # start, control, end
+ARC_W = (64, 92)                      # width at start, width at end: it grows as it travels
 STYLE = "hop"                         # "hop": one solid arc; "dots": a trail of growing dots
 DOTS = 5                              # dots in the trail, all in the open between ring and pin
 
 C = {  # display-p3 colours
-    "bg_top": (0.965, 0.978, 1.000), "bg_bottom": (0.835, 0.895, 0.985),
-    "bg_top_dark": (0.070, 0.110, 0.200), "bg_bottom_dark": (0.020, 0.035, 0.070),
-    "pin": (0.040, 0.400, 0.960), "pin_dark": (0.250, 0.560, 1.000),
-    "ring": (0.200, 0.740, 0.980), "ring_dark": (0.300, 0.800, 1.000),
-    "arc": (0.420, 0.690, 1.000), "arc_dark": (0.450, 0.700, 1.000),
+    "bg_top": (1.000, 1.000, 1.000), "bg_bottom": (0.925, 0.935, 0.955),
+    "bg_top_dark": (0.110, 0.110, 0.120), "bg_bottom_dark": (0.020, 0.020, 0.030),
+    "pin": (0.160, 0.520, 1.000), "pin_dark": (0.340, 0.640, 1.000),
+    "ring": (0.120, 0.780, 1.000), "ring_dark": (0.300, 0.800, 1.000),
+    "arc": (0.380, 0.700, 1.000), "arc_dark": (0.480, 0.760, 1.000),
 }
 
 # group settings, front to back: (shadow opacity, translucency)
-GLASS = {"pin": (0.50, 0.10), "ring": (0.40, 0.25), "arc": (0.30, 0.40)}
+GLASS = {"pin": (0.50, 0.35), "ring": (0.40, 0.35), "arc": (0.30, 0.35)}
 
 # "groups": each piece is its own glass group (they stack);
 # "single": all pieces in one group, like Apple's Photos petals, so their
 # colours meet and mix where they overlap.
-MODE = "groups"
-LAYER_OPACITY = 1.0                   # < 1 lets overlaps show through, light mode
+MODE = "single"
+LAYER_OPACITY = 0.9                   # < 1 lets overlaps show through, light mode
 LAYER_OPACITY_DARK = None             # dark-mode override (None = same)
-BLEND = None                          # e.g. "multiply" for Photos-style colour mixing (light mode only)
+BLEND = "multiply"                    # Photos-style colour mixing where pieces overlap (light mode only)
 
 
 # ---------------------------------------------------------------- geometry
