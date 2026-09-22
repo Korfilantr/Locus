@@ -1,0 +1,41 @@
+{
+  "name": "locbridge",
+  "identifier": "io.github.korfilantr.locbridge.source",
+  "subtitle": "Builds of locbridge, straight from GitHub Actions.",
+  "iconURL": "https://raw.githubusercontent.com/Korfilantr/Locus/main/sidestore/icon.png",
+  "website": "https://github.com/Korfilantr/Locus",
+  "tintColor": "#3B82F6",
+  "news": [],
+  "apps": [
+    {
+      "bundleIdentifier": "com.korfilantr.locbridge",
+      "versions": [
+        {
+          "version": "1.1.2",
+          "buildVersion": "2",
+          "marketingVersion": "1.1.2",
+          "date": "2026-09-22T10:43:09Z",
+          "downloadURL": "https://github.com/Korfilantr/Locus/releases/download/build-2/locbridge.ipa",
+          "size": 4540545,
+          "minOSVersion": "18.0",
+          "localizedDescription": "Build 2."
+        }
+      ],
+      "name": "locbridge",
+      "developerName": "Korfilantr",
+      "subtitle": "Teleport your iPhone's location, on the phone itself.",
+      "localizedDescription": "Sets your iPhone's location from the phone itself, through Apple's developer location service. Needs LocalDevVPN. Built on Locus (MIT).",
+      "iconURL": "https://raw.githubusercontent.com/Korfilantr/Locus/main/sidestore/icon.png",
+      "tintColor": "#3B82F6",
+      "category": "utilities",
+      "appPermissions": {
+        "entitlements": [],
+        "privacy": {
+          "NSLocalNetworkUsageDescription": "locbridge uses the local network to advertise as a pairable host (iOS 27 pairing) and to reach the developer tunnel (LocalDevVPN) for GPS override.",
+          "NSLocationAlwaysAndWhenInUseUsageDescription": "locbridge keeps a light location session alive so simulated GPS can stay active in the background.",
+          "NSLocationWhenInUseUsageDescription": "locbridge uses your real location so you can aim the map and return home after teleporting."
+        }
+      }
+    }
+  ]
+}
