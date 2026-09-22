@@ -1,4 +1,4 @@
-# Builds an unsigned Locus.ipa for sideloading. SideStore or AltStore Classic
+# Builds an unsigned locbridge.ipa (this fork of Locus) for sideloading. SideStore or AltStore Classic
 # signs it with your own Apple ID when you install it.
 #
 # Run it from the Actions tab ("Build IPA" -> "Run workflow"). Every run
@@ -68,11 +68,20 @@ jobs:
           brew install xcodegen
           xcodegen generate
 
+      - name: Work out the version
+        run: |
+          # project.yml holds major.minor; the run number makes every build a
+          # newer version, which is what SideStore looks for to offer an update.
+          base=$(sed -nE 's/^ *MARKETING_VERSION: "([0-9.]+)".*/\1/p' project.yml | head -1)
+          echo "VERSION=${base}.${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
+          echo "BUILD=${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
+
       - name: Build
         run: |
           xcodebuild -project Locus.xcodeproj -target Locus \
             -configuration Release -sdk iphoneos \
             SYMROOT="$PWD/build" \
+            MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD" \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
           test -d build/Release-iphoneos/Locus.app
 
@@ -80,23 +89,46 @@ jobs:
         run: |
           mkdir -p Payload
           cp -R build/Release-iphoneos/Locus.app Payload/
-          zip -qry Locus.ipa Payload
-          ls -l Locus.ipa
-          shasum -a 256 Locus.ipa | tee Locus.ipa.sha256
+          zip -qry locbridge.ipa Payload
+          ls -l locbridge.ipa
+          shasum -a 256 locbridge.ipa | tee locbridge.ipa.sha256
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Locus-ipa
+          name: locbridge-ipa
           path: |
-            Locus.ipa
-            Locus.ipa.sha256
+            locbridge.ipa
+            locbridge.ipa.sha256
 
       - name: Publish as a release
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE: ${{ inputs.idevice }} ${{ inputs.idevice_ref }}
         run: |
-          tag="build-${GITHUB_RUN_NUMBER}"
-          gh release create "$tag" Locus.ipa Locus.ipa.sha256 \
-            --title "Locus build ${GITHUB_RUN_NUMBER}" \
+          tag="build-${BUILD}"
+          gh release create "$tag" locbridge.ipa locbridge.ipa.sha256 \
+            --title "locbridge ${VERSION}" \
             --notes "Built from ${GITHUB_SHA::7}. idevice: ${SOURCE:-vendored}. Unsigned; install with SideStore or AltStore Classic."
+          echo "DOWNLOAD_URL=https://github.com/${GITHUB_REPOSITORY}/releases/download/${tag}/locbridge.ipa" >> "$GITHUB_ENV"
+
+      # The source lives on its own branch so these bot commits never touch main.
+      # Add it in SideStore with:
+      #   https://raw.githubusercontent.com/<owner>/<repo>/sidestore/source.json
+      - name: Update the SideStore source
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          src="$RUNNER_TEMP/source"
+          if git ls-remote --exit-code --heads origin sidestore >/dev/null; then
+            git fetch -q origin sidestore
+            git worktree add -q "$src" origin/sidestore
+            git -C "$src" checkout -q -B sidestore
+          else
+            git worktree add -q --orphan -b sidestore "$src"
+          fi
+          python3 .github/scripts/update_source.py locbridge.ipa "$src/source.json" \
+            "$VERSION" "$BUILD" "$DOWNLOAD_URL" "$GITHUB_REPOSITORY"
+          git -C "$src" add source.json
+          git -C "$src" commit -q -m "locbridge ${VERSION}"
+          git -C "$src" push -q origin sidestore
+          echo "SideStore source: https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/sidestore/source.json" >> "$GITHUB_STEP_SUMMARY"

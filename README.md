@@ -1,3 +1,14 @@
+# locbridge
+
+This is **locbridge**, a fork of [Locus](https://github.com/ChrisMack32/Locus) by Korfilantr & Claude. It changes the name and icon, opens LocalDevVPN by itself when the app starts, and imports saved places from the locbridge web app. It builds itself on GitHub Actions, with no Mac.
+
+- **Install / update through SideStore:** add the source `https://raw.githubusercontent.com/Korfilantr/Locus/sidestore/source.json`.
+- **Build:** Actions → *Build IPA* → *Run workflow*. Each run publishes a release and updates the source.
+
+The rest of this README is Locus's own.
+
+---
+
 # Locus
 
 Free and open-source iPhone location teleport. Tap the map, search a place, or drive a route — Locus injects coordinates through Apple’s **developer location service** into `locationd`, so Maps and other apps see the spoofed GPS (not just a Wi‑Fi lookup that outdoor GPS will overwrite).

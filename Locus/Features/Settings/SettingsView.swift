@@ -8,9 +8,9 @@ struct SettingsView: View {
 
     @State private var showImporter = false
     @State private var showPairOnDevice = false
-    @State private var showNameEasterEgg = false
     @State private var tunnelIP = TunnelConfig.targetIP
     @State private var localDevVPNInstalled = LocalDevVPN.isInstalled
+    @AppStorage(VPNAutoConnect.defaultsKey) private var autoConnectVPN = true
     @Environment(\.scenePhase) private var scenePhase
 
     private var supportsOnDevicePairing: Bool {
@@ -60,11 +60,12 @@ struct SettingsView: View {
                     Text("Developer pairing")
                 } footer: {
                     Text(supportsOnDevicePairing
-                         ? "On iOS 27, use Pair on this iPhone — no computer. Locus advertises a pairable host; confirm the 6-digit code under Settings › Privacy & Security › Developer Mode › Pair with Host. On older iOS, import an RPPairing file from idevice_pair (not a SideStore lockdown .mobiledevicepairing). LiveContainer: enable Fix File Picker on Locus, or use Paste / Share → LiveContainer → Locus."
-                         : "Import an RPPairing file from idevice_pair (not a SideStore lockdown .mobiledevicepairing). If the file picker fails (common in LiveContainer), enable Fix File Picker on the app, share the file into LiveContainer → Locus, or copy the plist and use Paste.")
+                         ? "On iOS 27, use Pair on this iPhone — no computer. locbridge advertises a pairable host; confirm the 6-digit code under Settings › Privacy & Security › Developer Mode › Pair with Host. On older iOS, import an RPPairing file from idevice_pair (not a SideStore lockdown .mobiledevicepairing). LiveContainer: enable Fix File Picker on locbridge, or use Paste / Share → LiveContainer → locbridge."
+                         : "Import an RPPairing file from idevice_pair (not a SideStore lockdown .mobiledevicepairing). If the file picker fails (common in LiveContainer), enable Fix File Picker on the app, share the file into LiveContainer → locbridge, or copy the plist and use Paste.")
                 }
 
                 Section {
+                    Toggle("Connect automatically", isOn: $autoConnectVPN)
                     TextField("Device tunnel IP", text: $tunnelIP)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
@@ -93,7 +94,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Tunnel")
                 } footer: {
-                    Text("Connect LocalDevVPN before teleporting. Default tunnel IP is 10.7.0.1. Start a spoof on Wi‑Fi first; it can keep working on cellular afterward.")
+                    Text("With Connect automatically on, opening locbridge opens LocalDevVPN to start the tunnel and comes straight back. Default tunnel IP is 10.7.0.1. Start a spoof on Wi‑Fi first; it can keep working on cellular afterward.")
                 }
 
                 Section("Privacy") {
@@ -103,27 +104,12 @@ struct SettingsView: View {
                 }
 
                 Section("About") {
+                    LabeledContent("Made by", value: "\(AppCredits.author) & \(AppCredits.collaborator)")
                     LabeledContent("Version", value: appVersion)
                     LabeledContent("Engine", value: "idevice DVT location simulation")
-                    Text("Locus is free and open source (MIT). Location injection uses the MIT-licensed idevice FFI.")
+                    Text(AppCredits.upstream)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
-                }
-
-                Section {
-                    Button {
-                        showNameEasterEgg = true
-                    } label: {
-                        Text("locus, n. — a place. From the Latin for where you are.")
-                            .font(.footnote.italic())
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 4)
-                    }
-                    .buttonStyle(.plain)
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
                 }
             }
             .navigationTitle("Settings")
@@ -153,9 +139,6 @@ struct SettingsView: View {
                 PairOnDeviceView()
                     .environmentObject(pairing)
             }
-            .fullScreenCover(isPresented: $showNameEasterEgg) {
-                LocusEasterEggView()
-            }
             .onAppear {
                 localDevVPNInstalled = LocalDevVPN.isInstalled
             }
@@ -175,11 +158,13 @@ struct PlacesView: View {
 
     @State private var placeToRename: SavedPlace?
     @State private var renameText = ""
+    @State private var showPlacesImporter = false
+    @State private var importMessage: String?
 
     var body: some View {
         NavigationStack {
             List {
-                Section("Favorites") {
+                Section {
                     if session.favorites.isEmpty {
                         Text("Star a pin from the map to save it.")
                             .foregroundStyle(.secondary)
@@ -201,6 +186,10 @@ struct PlacesView: View {
                                 .tint(.gray)
                             }
                     }
+                } header: {
+                    Text("Favorites")
+                } footer: {
+                    Text("Import brings in saved places from the locbridge web app: open its presets.json with locbridge, or copy its contents and paste.")
                 }
 
                 Section("Recents") {
@@ -225,6 +214,46 @@ struct PlacesView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") { dismiss() }
                 }
+                ToolbarItem(placement: .primaryAction) {
+                    Menu {
+                        Button {
+                            showPlacesImporter = true
+                        } label: {
+                            Label("Import from file…", systemImage: "doc")
+                        }
+                        Button {
+                            importFromClipboard()
+                        } label: {
+                            Label("Paste from clipboard", systemImage: "doc.on.clipboard")
+                        }
+                    } label: {
+                        Label("Import", systemImage: "square.and.arrow.down")
+                    }
+                }
+            }
+            .sheet(isPresented: $showPlacesImporter) {
+                PairingDocumentPicker(
+                    onPick: { url in
+                        showPlacesImporter = false
+                        do {
+                            let count = try session.importFavorites(from: url)
+                            importMessage = "Imported \(count) place\(count == 1 ? "" : "s")."
+                        } catch {
+                            importMessage = error.localizedDescription
+                        }
+                    },
+                    onCancel: { showPlacesImporter = false },
+                    contentTypes: [.json, .plainText, .data]
+                )
+                .ignoresSafeArea()
+            }
+            .alert("Import places", isPresented: Binding(
+                get: { importMessage != nil },
+                set: { if !$0 { importMessage = nil } }
+            )) {
+                Button("OK", role: .cancel) { importMessage = nil }
+            } message: {
+                Text(importMessage ?? "")
             }
             .alert("Rename Favorite", isPresented: Binding(
                 get: { placeToRename != nil },
@@ -243,6 +272,19 @@ struct PlacesView: View {
             } message: {
                 Text("Choose a name you’ll recognize later.")
             }
+        }
+    }
+
+    private func importFromClipboard() {
+        guard let text = UIPasteboard.general.string, let data = text.data(using: .utf8) else {
+            importMessage = "The clipboard has no text. Copy the contents of presets.json first."
+            return
+        }
+        do {
+            let count = session.importFavorites(try SavedPlace.decodeList(from: data))
+            importMessage = "Imported \(count) place\(count == 1 ? "" : "s")."
+        } catch {
+            importMessage = error.localizedDescription
         }
     }
 

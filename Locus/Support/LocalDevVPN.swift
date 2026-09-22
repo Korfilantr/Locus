@@ -6,8 +6,8 @@ enum LocalDevVPN {
     static let appStoreURL = URL(string: "https://apps.apple.com/us/app/localdevvpn/id6755608044")!
     static let detectURL = URL(string: "localdevvpn://")!
 
-    /// Starts the tunnel, then returns to Locus via `locus://`.
-    static let enableURL = URL(string: "localdevvpn://enable?scheme=locus")!
+    /// Starts the tunnel, then returns to locbridge via `locbridge://`.
+    static let enableURL = URL(string: "localdevvpn://enable?scheme=locbridge")!
 
     static var isInstalled: Bool {
         UIApplication.shared.canOpenURL(detectURL)
@@ -69,5 +69,38 @@ enum LocalDevVPN {
             ptr = interface.ifa_next
         }
         return results
+    }
+}
+
+/// Opens LocalDevVPN when locbridge comes to the foreground without a tunnel.
+/// LocalDevVPN connects, then returns here through `locbridge://`.
+@MainActor
+enum VPNAutoConnect {
+    nonisolated static let defaultsKey = "locbridge.autoConnectVPN"
+
+    /// On by default; the switch lives in Settings › Tunnel.
+    static var isEnabled: Bool {
+        UserDefaults.standard.object(forKey: defaultsKey) as? Bool ?? true
+    }
+
+    /// Set while on-device pairing runs: pairing sends the user to Settings and
+    /// back, and bouncing them into LocalDevVPN then would break the flow.
+    static var isSuspended = false
+
+    /// Long enough that a tunnel which is slow to come up can't cause a loop
+    /// of locbridge and LocalDevVPN opening each other.
+    private static let cooldown: TimeInterval = 30
+    private static var lastAttempt: Date?
+
+    static func connectIfNeeded() async {
+        guard isEnabled, !isSuspended, LocalDevVPN.isInstalled else { return }
+        // Coming back from LocalDevVPN, the tunnel interface can take a moment to appear.
+        try? await Task.sleep(nanoseconds: 1_200_000_000)
+        guard UIApplication.shared.applicationState == .active,
+              !isSuspended,
+              !LocalDevVPN.isConnected else { return }
+        if let last = lastAttempt, Date().timeIntervalSince(last) < cooldown { return }
+        lastAttempt = Date()
+        LocalDevVPN.openInstalled()
     }
 }

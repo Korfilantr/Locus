@@ -23,9 +23,9 @@ final class SilentAudioKeepAlive {
             p.play()
             player = p
             wasActive = true
-            NSLog("[Locus] silent audio keep-alive started")
+            NSLog("[locbridge] silent audio keep-alive started")
         } catch {
-            NSLog("[Locus] silent audio keep-alive failed: %@", error.localizedDescription)
+            NSLog("[locbridge] silent audio keep-alive failed: %@", error.localizedDescription)
         }
     }
 

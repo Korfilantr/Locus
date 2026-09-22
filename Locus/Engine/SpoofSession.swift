@@ -243,6 +243,25 @@ final class SpoofSession: ObservableObject {
         SavedPlace.save(favorites, key: favoritesKey)
     }
 
+    /// Adds imported places to favorites, replacing any at the same spot. Returns how many.
+    @discardableResult
+    func importFavorites(_ places: [SavedPlace]) -> Int {
+        for place in places.reversed() {
+            var named = place
+            named.name = place.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            favorites.removeAll { $0.id == named.id }
+            favorites.insert(named, at: 0)
+        }
+        SavedPlace.save(favorites, key: favoritesKey)
+        return places.count
+    }
+
+    func importFavorites(from url: URL) throws -> Int {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        return importFavorites(try SavedPlace.decodeList(from: Data(contentsOf: url)))
+    }
+
     func removeFavorite(_ place: SavedPlace) {
         favorites.removeAll { $0.id == place.id }
         SavedPlace.save(favorites, key: favoritesKey)
@@ -415,7 +434,7 @@ final class SpoofSession: ObservableObject {
     private func postDropNotification(_ message: String) {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
         let content = UNMutableNotificationContent()
-        content.title = "Locus spoof dropped"
+        content.title = "locbridge spoof dropped"
         content.body = message
         content.sound = .default
         let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)

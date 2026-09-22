@@ -1,0 +1,9 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!-- The bridge: an arch over the road, the pin standing on its crown. -->
+  <path fill="#FFFFFF" d="M188 774 Q512 438 836 774 L766 774 Q512 530 258 774 Z"/>
+  <rect x="333.0" y="699.4" width="22" height="68.6" rx="11.0" fill="#FFFFFF"/>
+  <rect x="417.0" y="659.3" width="22" height="108.7" rx="11.0" fill="#FFFFFF"/>
+  <rect x="585.0" y="659.3" width="22" height="108.7" rx="11.0" fill="#FFFFFF"/>
+  <rect x="669.0" y="699.4" width="22" height="68.6" rx="11.0" fill="#FFFFFF"/>
+  <rect x="140" y="762" width="744" height="46" rx="23" fill="#FFFFFF"/>
+</svg>

@@ -7,6 +7,8 @@ import UIKit
 struct PairingDocumentPicker: UIViewControllerRepresentable {
     var onPick: (URL) -> Void
     var onCancel: (() -> Void)?
+    /// Pairing files by default; the places importer passes JSON.
+    var contentTypes: [UTType] = PairingStore.supportedTypes
 
     func makeCoordinator() -> Coordinator {
         Coordinator(onPick: onPick, onCancel: onCancel)
@@ -14,7 +16,7 @@ struct PairingDocumentPicker: UIViewControllerRepresentable {
 
     func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
         let picker = UIDocumentPickerViewController(
-            forOpeningContentTypes: PairingStore.supportedTypes,
+            forOpeningContentTypes: contentTypes,
             asCopy: true
         )
         picker.delegate = context.coordinator
