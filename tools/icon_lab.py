@@ -35,6 +35,14 @@ C = {  # display-p3 colours
 # group settings, front to back: (shadow opacity, translucency)
 GLASS = {"pin": (0.50, 0.10), "ring": (0.40, 0.25), "arc": (0.30, 0.40)}
 
+# "groups": each piece is its own glass group (they stack);
+# "single": all pieces in one group, like Apple's Photos petals, so their
+# colours meet and mix where they overlap.
+MODE = "groups"
+LAYER_OPACITY = 1.0                   # < 1 lets overlaps show through, light mode
+LAYER_OPACITY_DARK = None             # dark-mode override (None = same)
+BLEND = None                          # e.g. "multiply" for Photos-style colour mixing (light mode only)
+
 
 # ---------------------------------------------------------------- geometry
 def quad(p0, p1, p2, t):
@@ -145,13 +153,22 @@ def p3(c, a=1.0):
 
 
 def layer(name, image, key):
-    return {
+    out = {
         "name": name, "image-name": image, "glass": True,
         "fill-specializations": [
             {"value": {"solid": p3(C[key])}},
             {"appearance": "dark", "value": {"solid": p3(C[key + "_dark"])}},
         ],
     }
+    if LAYER_OPACITY != 1.0 or LAYER_OPACITY_DARK is not None:
+        out["opacity-specializations"] = [
+            {"value": LAYER_OPACITY},
+            {"appearance": "dark", "value": LAYER_OPACITY if LAYER_OPACITY_DARK is None else LAYER_OPACITY_DARK},
+        ]
+    if BLEND:
+        # multiply on a dark background would turn everything black; keep dark normal
+        out["blend-mode-specializations"] = [{"value": BLEND}, {"appearance": "dark", "value": "normal"}]
+    return out
 
 
 def group(lyr, key):
@@ -167,12 +184,17 @@ def icon_json():
             {"value": {"linear-gradient": [p3(C["bg_top"]), p3(C["bg_bottom"])]}},
             {"appearance": "dark", "value": {"linear-gradient": [p3(C["bg_top_dark"]), p3(C["bg_bottom_dark"])]}},
         ],
-        # the first group is the frontmost
-        "groups": [
+        # the first group is the frontmost (and, inside a group, the first layer)
+        "groups": ([
             group(layer("Pin", "Pin.svg", "pin"), "pin"),
             group(layer("Origin", "Origin.svg", "ring"), "ring"),
             group(layer("Arc", "Arc.svg", "arc"), "arc"),
-        ],
+        ] if MODE == "groups" else [{
+            "layers": [layer("Pin", "Pin.svg", "pin"), layer("Origin", "Origin.svg", "ring"), layer("Arc", "Arc.svg", "arc")],
+            "specular": True,
+            "shadow": {"kind": "layer-color", "opacity": GLASS["pin"][0]},
+            "translucency": {"enabled": True, "value": GLASS["pin"][1]},
+        }]),
         "supported-platforms": {"circles": ["watchOS"], "squares": "shared"},
     }
 
@@ -250,6 +272,27 @@ if __name__ == "__main__":
             C["pin_dark"] = tuple(float(v) for v in arg.split("=", 1)[1].split(","))
         elif arg.startswith("--pin-glass="):  # translucency of the pin group
             GLASS["pin"] = (GLASS["pin"][0], float(arg.split("=", 1)[1]))
+        elif arg.startswith("--glass="):      # translucency of every group
+            v = float(arg.split("=", 1)[1])
+            GLASS = {k: (s, v) for k, (s, _) in GLASS.items()}
+        elif arg == "--white":
+            C["bg_top"], C["bg_bottom"] = (1.0, 1.0, 1.0), (0.925, 0.935, 0.955)
+            C["bg_top_dark"], C["bg_bottom_dark"] = (0.11, 0.11, 0.12), (0.02, 0.02, 0.03)
+        elif arg.startswith("--mode="):
+            MODE = arg.split("=", 1)[1]
+        elif arg.startswith("--opacity="):
+            LAYER_OPACITY = float(arg.split("=", 1)[1])
+        elif arg.startswith("--opacity-dark="):
+            LAYER_OPACITY_DARK = float(arg.split("=", 1)[1])
+        elif arg.startswith("--blend="):
+            BLEND = arg.split("=", 1)[1]
+        elif arg.startswith("--arc-w="):
+            ARC_W = tuple(float(v) for v in arg.split("=", 1)[1].split(","))
+        elif arg.startswith("--ring="):       # outer,inner radius
+            RING_OUT, RING_IN = (float(v) for v in arg.split("=", 1)[1].split(","))
+        elif arg.startswith("--color="):      # --color=arc=r,g,b  (any key of C)
+            key, rgb = arg.split("=", 2)[1:]
+            C[key] = tuple(float(v) for v in rgb.split(","))
     os.makedirs(out_dir, exist_ok=True)
     write_bundle(out_dir)
     if "--flat" in sys.argv:
