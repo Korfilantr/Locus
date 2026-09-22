@@ -1,0 +1,46 @@
+# Finds the jkcoxson/idevice commit whose generated header matches the one
+# Locus vendors, so "Build IPA" can compile that library from source instead
+# of trusting the prebuilt libidevice_ffi.a. Header generation does not
+# depend on the target, so this runs on Linux.
+name: Match idevice
+
+on:
+  workflow_dispatch:
+    inputs:
+      since:
+        description: Oldest idevice commit date to try
+        default: "2026-07-01"
+      until:
+        description: Newest idevice commit date to try
+        default: "2026-07-28"
+
+jobs:
+  match:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Try each idevice commit, newest first
+        env:
+          SINCE: ${{ inputs.since }}
+          UNTIL: ${{ inputs.until }}
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev >/dev/null
+          want="$RUNNER_TEMP/want.h"
+          tr -d '\r' < Vendor/idevice/idevice.h > "$want"
+          git clone -q https://github.com/jkcoxson/idevice "$RUNNER_TEMP/idevice"
+          cd "$RUNNER_TEMP/idevice"
+          best=""; bestn=999999
+          for c in $(git log --format=%H --since="$SINCE" --until="$UNTIL 23:59"); do
+            git checkout -q "$c"
+            if ! (cd ffi && cargo check -q 2>/dev/null); then
+              echo "$c  does not build, skipped"; continue
+            fi
+            n=$(diff <(tr -d '\r' < ffi/idevice.h) "$want" | grep -c '^[<>]' || true)
+            echo "$c  $(git log -1 --format='%ad %s' --date=short) -> $n differing lines"
+            if [ "$n" -lt "$bestn" ]; then best=$c; bestn=$n; fi
+            if [ "$n" -eq 0 ]; then break; fi
+          done
+          echo "### Closest idevice commit: \`$best\` ($bestn differing header lines)" >> "$GITHUB_STEP_SUMMARY"
+          [ "$bestn" -eq 0 ] && echo "Exact match. Use it as idevice_ref in Build IPA." >> "$GITHUB_STEP_SUMMARY" || true

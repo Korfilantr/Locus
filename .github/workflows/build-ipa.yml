@@ -1,0 +1,102 @@
+# Builds an unsigned Locus.ipa for sideloading. SideStore or AltStore Classic
+# signs it with your own Apple ID when you install it.
+#
+# Run it from the Actions tab ("Build IPA" -> "Run workflow"). Every run
+# publishes the .ipa as a GitHub Release, so it can be downloaded straight to
+# the phone.
+name: Build IPA
+
+on:
+  workflow_dispatch:
+    inputs:
+      idevice:
+        description: >-
+          idevice library: "vendored" uses the prebuilt libidevice_ffi.a that
+          Locus ships; "source" compiles it here from jkcoxson/idevice.
+        type: choice
+        options: [vendored, source]
+        default: vendored
+      idevice_ref:
+        description: idevice commit or tag to compile when idevice is "source"
+        type: string
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          sw_vers
+
+      - name: Compile idevice from source
+        if: inputs.idevice == 'source'
+        env:
+          REF: ${{ inputs.idevice_ref }}
+        run: |
+          if [ -z "$REF" ]; then
+            echo "::error::Set idevice_ref to the idevice commit to compile (see the Match idevice workflow)."
+            exit 1
+          fi
+          git clone https://github.com/jkcoxson/idevice "$RUNNER_TEMP/idevice"
+          cd "$RUNNER_TEMP/idevice"
+          git checkout "$REF"
+          rustup target add aarch64-apple-ios
+          cd ffi
+          # Same command idevice's own justfile uses for its iOS device build.
+          BINDGEN_EXTRA_CLANG_ARGS="--sysroot=$(xcrun --sdk iphoneos --show-sdk-path)" \
+          IPHONEOS_DEPLOYMENT_TARGET=17.0 \
+            cargo build --release --target aarch64-apple-ios
+          # Locus's Swift code is written against the vendored header, so a
+          # different header means a different API: stop rather than guess.
+          if ! diff -q <(tr -d '\r' < idevice.h) <(tr -d '\r' < "$GITHUB_WORKSPACE/Vendor/idevice/idevice.h"); then
+            echo "::warning::Header from $REF differs from the vendored one; the app may not compile."
+            diff <(tr -d '\r' < "$GITHUB_WORKSPACE/Vendor/idevice/idevice.h") <(tr -d '\r' < idevice.h) | head -80 || true
+          fi
+          cp "$RUNNER_TEMP/idevice/target/aarch64-apple-ios/release/libidevice_ffi.a" "$GITHUB_WORKSPACE/Vendor/idevice/"
+          cp idevice.h "$GITHUB_WORKSPACE/Vendor/idevice/idevice.h"
+
+      - name: Generate the Xcode project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: Build
+        run: |
+          xcodebuild -project Locus.xcodeproj -target Locus \
+            -configuration Release -sdk iphoneos \
+            SYMROOT="$PWD/build" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+          test -d build/Release-iphoneos/Locus.app
+
+      - name: Package the .ipa
+        run: |
+          mkdir -p Payload
+          cp -R build/Release-iphoneos/Locus.app Payload/
+          zip -qry Locus.ipa Payload
+          ls -l Locus.ipa
+          shasum -a 256 Locus.ipa | tee Locus.ipa.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Locus-ipa
+          path: |
+            Locus.ipa
+            Locus.ipa.sha256
+
+      - name: Publish as a release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE: ${{ inputs.idevice }} ${{ inputs.idevice_ref }}
+        run: |
+          tag="build-${GITHUB_RUN_NUMBER}"
+          gh release create "$tag" Locus.ipa Locus.ipa.sha256 \
+            --title "Locus build ${GITHUB_RUN_NUMBER}" \
+            --notes "Built from ${GITHUB_SHA::7}. idevice: ${SOURCE:-vendored}. Unsigned; install with SideStore or AltStore Classic."
