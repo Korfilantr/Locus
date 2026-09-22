@@ -6,7 +6,7 @@ name: Render icon
 on:
   push:
     branches: [icon-lab]
-    paths: ["AppIcon.icon/**", ".github/workflows/render-icon.yml"]
+    paths: ["variants/**", ".github/workflows/render-icon.yml"]
   workflow_dispatch:
 
 permissions:
@@ -37,33 +37,26 @@ jobs:
           # Surface ictool's own usage text, so a changed CLI is easy to spot.
           "$ICTOOL" --help > help.txt 2>&1 || true
           echo "::notice title=ictool help::$(head -c 3000 help.txt | tr '\n' '|')"
-          # Two CLI spellings exist across Icon Composer versions; try both.
-          render() {  # rendition, appearance-name-for-export-preview
-            local r=$1 a=$2 out="previews/$1.png"
-            if "$ICTOOL" AppIcon.icon --export-image --output-file "$out" --platform iOS \
-                 --rendition "$r" --width 1024 --height 1024 --scale 1 > err.txt 2>&1; then
-              echo "rendered $r (export-image)"; return
-            fi
-            e1=$(tr '\n' ' ' < err.txt | head -c 400)
-            if "$ICTOOL" AppIcon.icon --export-preview iOS "$a" 1024 1024 1 "$out" > err.txt 2>&1; then
-              echo "rendered $r (export-preview)"; return
-            fi
-            e2=$(tr '\n' ' ' < err.txt | head -c 400)
-            echo "::warning title=could not render $r::export-image: $e1 || export-preview: $e2"
-          }
-          render Default Light
-          render Dark Dark
-          render TintedLight TintedLight
-          render TintedDark TintedDark
-          render ClearLight ClearLight
-          render ClearDark ClearDark
-          ls -l previews
+          # ictool usage: input --export-preview platform appearance width height scale out.png
+          for icon in variants/*/AppIcon.icon; do
+            v=$(basename "$(dirname "$icon")")
+            mkdir -p "previews/$v"
+            for a in Light Dark TintedLight TintedDark ClearLight ClearDark; do
+              if ! "$ICTOOL" "$icon" --export-preview iOS "$a" 1024 1024 1 "previews/$v/$a.png" > err.txt 2>&1; then
+                echo "::warning title=could not render $v $a::$(tr '\n' ' ' < err.txt | head -c 400)"
+              fi
+            done
+          done
+          find previews -name '*.png' | sort
 
-      - name: Contact sheet
+      - name: Contact sheets
         run: |
-          ls previews/*.png >/dev/null 2>&1 || { echo "nothing rendered"; exit 0; }
           python3 -m pip install --quiet --break-system-packages pillow || python3 -m pip install --quiet pillow
-          python3 tools/sheet.py previews/sheet.png $(ls previews/{Default,Dark,TintedLight,TintedDark}.png 2>/dev/null)
+          for d in previews/*/; do
+            v=$(basename "$d")
+            python3 tools/sheet.py "previews/$v-sheet.png" $(ls "$d"{Light,Dark,TintedDark,ClearDark}.png 2>/dev/null)
+          done
+          python3 tools/sheet.py previews/overview.png $(ls previews/*/Light.png) $(ls previews/*/Dark.png)
 
       - name: Commit the previews
         run: |

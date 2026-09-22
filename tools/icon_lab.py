@@ -19,8 +19,10 @@ PIN_R = 172
 PIN_TIP = (706 + DX, 782 + DY)
 HOLE_R = 64
 # an even hop from the top of the ring, peaking between the two, landing in the pin's head
-ARC = ((300 + DX, 662 + DY), (470 + DX, 96 + DY), (630 + DX, 410 + DY))   # start, control, end
-ARC_W = (26, 70)                      # width at start, width at end: it grows as it travels
+ARC = ((318 + DX, 670 + DY), (470 + DX, 170 + DY), (640 + DX, 628 + DY))   # start, control, end
+ARC_W = (36, 72)                      # width at start, width at end: it grows as it travels
+STYLE = "hop"                         # "hop": one solid arc; "dots": a trail of growing dots
+DOTS = 5                              # dots in the trail, all in the open between ring and pin
 
 C = {  # display-p3 colours
     "bg_top": (0.965, 0.978, 1.000), "bg_bottom": (0.835, 0.895, 0.985),
@@ -112,7 +114,28 @@ def ring_svg():
     return svg(f'  <path fill="#FFFFFF" fill-rule="evenodd" d="{circle_d(ORIGIN, RING_OUT)} {circle_d(ORIGIN, RING_IN)}"/>')
 
 
+def dot_trail():
+    """(centre, radius) along the arc, growing towards the pin."""
+    # Space the dots evenly by distance along the curve, not by curve parameter,
+    # or they bunch up at the top of the hop.
+    samples = [quad(*ARC, i / 400) for i in range(401)]
+    lengths = [0.0]
+    for a, b in zip(samples, samples[1:]):
+        lengths.append(lengths[-1] + math.dist(a, b))
+    out = []
+    for i in range(DOTS):
+        f = i / (DOTS - 1)
+        target = lengths[-1] * (0.10 + 0.66 * f)
+        j = next(k for k, v in enumerate(lengths) if v >= target)
+        out.append((samples[j], ARC_W[0] / 2 + (ARC_W[1] - ARC_W[0]) / 2 * f + 2))
+    return out
+
+
 def arc_svg():
+    if STYLE == "dots":
+        dots = [f'  <path fill="#FFFFFF" d="{circle_d((round(c[0], 1), round(c[1], 1)), round(r, 1))}"/>'
+                for c, r in dot_trail()]
+        return svg("\n".join(dots))
     return svg(f'  <path fill="#FFFFFF" d="{path_d(arc_polygon())}"/>')
 
 
@@ -191,7 +214,12 @@ def flat(out, dark=False):
         d.ellipse([(c[0] - r) * S, (c[1] - r) * S, (c[0] + r) * S, (c[1] + r) * S], fill=fill)
 
     arc_m = Image.new("L", (N, N), 0)
-    ImageDraw.Draw(arc_m).polygon(sc(arc_polygon()), fill=255)
+    if STYLE == "dots":
+        d = ImageDraw.Draw(arc_m)
+        for c, r in dot_trail():
+            ell(d, c, r, 255)
+    else:
+        ImageDraw.Draw(arc_m).polygon(sc(arc_polygon()), fill=255)
     ring_m = Image.new("L", (N, N), 0)
     d = ImageDraw.Draw(ring_m)
     ell(d, ORIGIN, RING_OUT, 255)
@@ -213,6 +241,9 @@ def flat(out, dark=False):
 
 if __name__ == "__main__":
     out_dir = sys.argv[1]
+    for arg in sys.argv[2:]:
+        if arg.startswith("--style="):
+            STYLE = arg.split("=", 1)[1]
     os.makedirs(out_dir, exist_ok=True)
     write_bundle(out_dir)
     if "--flat" in sys.argv:
