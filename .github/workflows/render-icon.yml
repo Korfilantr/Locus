@@ -1,0 +1,58 @@
+# Renders AppIcon.icon with Apple's own Liquid Glass renderer (ictool, part of
+# Icon Composer in Xcode 26) and commits the images to previews/ on this
+# branch. It builds no app and publishes nothing.
+name: Render icon
+
+on:
+  push:
+    branches: [icon-lab]
+    paths: ["AppIcon.icon/**", ".github/workflows/render-icon.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  render:
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Find ictool
+        run: |
+          xcodebuild -version
+          ictool=$(ls -d /Applications/Xcode*.app/Contents/Applications/Icon\ Composer.app/Contents/Executables/ictool 2>/dev/null | head -1)
+          if [ -z "$ictool" ]; then
+            echo "::error::ictool not found in any Xcode on this runner"
+            ls /Applications | grep -i xcode
+            exit 1
+          fi
+          echo "ICTOOL=$ictool" >> "$GITHUB_ENV"
+          "$ictool" --version || true
+
+      - name: Render every appearance
+        run: |
+          rm -rf previews && mkdir previews
+          for r in Default Dark TintedLight TintedDark ClearLight ClearDark; do
+            if "$ICTOOL" AppIcon.icon --export-image --output-file "previews/$r.png" \
+                 --platform iOS --rendition "$r" --width 1024 --height 1024 --scale 1; then
+              echo "rendered $r"
+            else
+              echo "::warning::could not render $r"
+            fi
+          done
+          ls -l previews
+
+      - name: Contact sheet
+        run: |
+          python3 -m pip install --quiet --break-system-packages pillow || python3 -m pip install --quiet pillow
+          python3 tools/sheet.py previews/sheet.png previews/Default.png previews/Dark.png previews/TintedLight.png previews/TintedDark.png
+
+      - name: Commit the previews
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add previews
+          git commit -q -m "Render previews for ${GITHUB_SHA::7}" || exit 0
+          git push -q origin HEAD:icon-lab
