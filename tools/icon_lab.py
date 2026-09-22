@@ -20,7 +20,9 @@ PIN_TIP = (706 + DX, 782 + DY)
 HOLE_R = 64
 # an even hop from the top of the ring, peaking between the two, dipping about a
 # third of the way into the pin's head (well clear of its hole)
-ARC = ((318 + DX, 670 + DY), (410 + DX, 160 + DY), (548 + DX, 512 + DY))   # start, control, end
+# A cubic curve keeps the bend at the top wide (radius > 100) so the thick band
+# stays round there instead of folding into a point.
+ARC = ((318 + DX, 670 + DY), (300 + DX, 330 + DY), (430 + DX, 240 + DY), (560 + DX, 490 + DY))
 ARC_W = (64, 92)                      # width at start, width at end: it grows as it travels
 STYLE = "hop"                         # "hop": one solid arc; "dots": a trail of growing dots
 DOTS = 5                              # dots in the trail, all in the open between ring and pin
@@ -46,14 +48,19 @@ BLEND = "multiply"                    # Photos-style colour mixing where pieces 
 
 
 # ---------------------------------------------------------------- geometry
-def quad(p0, p1, p2, t):
-    return ((1 - t) ** 2 * p0[0] + 2 * (1 - t) * t * p1[0] + t * t * p2[0],
-            (1 - t) ** 2 * p0[1] + 2 * (1 - t) * t * p1[1] + t * t * p2[1])
+def bez(pts, t):
+    """A point on a Bezier curve of any degree (de Casteljau)."""
+    pts = list(pts)
+    while len(pts) > 1:
+        pts = [((1 - t) * a[0] + t * b[0], (1 - t) * a[1] + t * b[1]) for a, b in zip(pts, pts[1:])]
+    return pts[0]
 
 
-def quad_d(p0, p1, p2, t):
-    return (2 * (1 - t) * (p1[0] - p0[0]) + 2 * t * (p2[0] - p1[0]),
-            2 * (1 - t) * (p1[1] - p0[1]) + 2 * t * (p2[1] - p1[1]))
+def bez_d(pts, t):
+    """The curve's direction at t."""
+    n = len(pts) - 1
+    hodo = [(n * (b[0] - a[0]), n * (b[1] - a[1])) for a, b in zip(pts, pts[1:])]
+    return bez(hodo, t)
 
 
 def arc_polygon(steps=96):
@@ -61,8 +68,8 @@ def arc_polygon(steps=96):
     left, right = [], []
     for i in range(steps + 1):
         t = i / steps
-        x, y = quad(*ARC, t)
-        dx, dy = quad_d(*ARC, t)
+        x, y = bez(ARC, t)
+        dx, dy = bez_d(ARC, t)
         n = math.hypot(dx, dy)
         nx, ny = -dy / n, dx / n
         w = (ARC_W[0] + (ARC_W[1] - ARC_W[0]) * t) / 2
@@ -73,10 +80,10 @@ def arc_polygon(steps=96):
         return [(center[0] + w * math.cos(a_from + (a_to - a_from) * i / steps),
                  center[1] + w * math.sin(a_from + (a_to - a_from) * i / steps)) for i in range(1, steps)]
 
-    end = quad(*ARC, 1)
-    a_end = math.atan2(*reversed(quad_d(*ARC, 1)))
-    start = quad(*ARC, 0)
-    a_start = math.atan2(*reversed(quad_d(*ARC, 0)))
+    end = bez(ARC, 1)
+    a_end = math.atan2(*reversed(bez_d(ARC, 1)))
+    start = bez(ARC, 0)
+    a_start = math.atan2(*reversed(bez_d(ARC, 0)))
     # left side runs along +normal (angle + pi/2); caps sweep around the far side
     end_cap = cap(end, ARC_W[1] / 2, a_end + math.pi / 2, a_end - math.pi / 2)
     start_cap = cap(start, ARC_W[0] / 2, a_start - math.pi / 2, a_start - 3 * math.pi / 2)
@@ -127,7 +134,7 @@ def dot_trail():
     """(centre, radius) along the arc, growing towards the pin."""
     # Space the dots evenly by distance along the curve, not by curve parameter,
     # or they bunch up at the top of the hop.
-    samples = [quad(*ARC, i / 400) for i in range(401)]
+    samples = [bez(ARC, i / 400) for i in range(401)]
     lengths = [0.0]
     for a, b in zip(samples, samples[1:]):
         lengths.append(lengths[-1] + math.dist(a, b))
